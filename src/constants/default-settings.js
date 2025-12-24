@@ -54,7 +54,15 @@ export const DEFAULT_SETTINGS = {
     NotifyThresholdDays: 3,
     NotifyThresholdPercent: 90,
     enableTrafficNode: true,
-    storageType: 'kv'
+    storageType: 'kv',
+    disguise: {
+        enabled: false,                         // 是否启用伪装功能 (默认关闭)
+        adminPath: '/admin',                    // 管理后台访问路径
+        pageType: 'redirect',                   // 伪装类型: 'redirect' | 'custom' | 'builtin'
+        redirectUrl: 'https://www.bing.com',    // 重定向URL (pageType='redirect'时使用)
+        customHtml: '',                         // 自定义HTML内容 (pageType='custom'时使用)
+        builtinTemplate: 'search'               // 内置模板 (pageType='builtin'时使用): 'search' | 'blog' | 'portfolio'
+    }
 };
 
 export const DEFAULT_NODE_FORM = {

@@ -22,6 +22,8 @@
 import { handleMisubRequest } from './modules/subscription-handler.js';
 import { handleApiRequest } from './modules/api-router.js';
 import { createJsonResponse } from './modules/utils.js';
+import { generateDisguiseResponse } from './modules/disguise-templates.js';
+import { StorageFactory } from './storage-adapter.js';
 
 /**
  * 主要的请求处理函数
@@ -56,11 +58,23 @@ export async function onRequest(context) {
             const { handleCronTrigger } = await import('./modules/notifications.js');
             return await handleCronTrigger(env);
         } else {
+            // 读取伪装配置
+            let disguiseConfig = null;
+            try {
+                const storage = StorageFactory.create(env);
+                const configData = await storage.get('misub_settings_v1');
+                if (configData) {
+                    const settings = typeof configData === 'string' ? JSON.parse(configData) : configData;
+                    disguiseConfig = settings.disguise;
+                }
+            } catch (e) {
+                console.error('[Disguise Config Error]', e);
+            }
+
             // 静态文件处理
             const isStaticAsset = /^\/(assets|@vite|src)\/./.test(url.pathname) || /\.\w+$/.test(url.pathname);
 
             // SPA 路由白名单：这些请求应该交由前端路由处理，而不是作为订阅请求
-            // [修复] 增加更多可能的SPA路由，防止被误判为订阅请求
             const isSpaRoute = [
                 '/groups',
                 '/nodes',
@@ -71,21 +85,21 @@ export async function onRequest(context) {
                 '/profile'
             ].some(route => url.pathname === route || url.pathname.startsWith(route + '/'));
 
-            if (!isStaticAsset && !isSpaRoute && url.pathname !== '/') {
-                // 如果是浏览器请求且看起来像是一个页面访问，优先尝试返回 SPA
-                // fix: 解决经典模式下可能的路由冲突
-                const acceptHeader = request.headers.get('Accept') || '';
-                if (acceptHeader.includes('text/html')) {
-                    // 既然它不是静态资源，也不是已知的SPA路由，但请求的是HTML
-                    // 我们可以选择:
-                    // 1. 仍然尝试作为订阅处理 (如果用户在浏览器直接访问 shortlink)
-                    // 2. 返回 next() 让前端处理 404
+            // 检查是否是自定义管理路径
+            const adminPath = disguiseConfig?.adminPath || '/admin';
+            const isAdminPath = url.pathname === adminPath || url.pathname.startsWith(adminPath + '/');
 
-                    // 这里保持现有逻辑，但添加注释备忘。
-                    // 既然目前通过 ui.js 强制跳转回 / 解决了经典模式的问题，
-                    // 这里我们可以保留对短链接的支持。
-                    // return next(); 
-                }
+            // 如果访问根路径且伪装功能启用，返回伪装页面
+            if (url.pathname === '/' && disguiseConfig?.enabled) {
+                return generateDisguiseResponse(disguiseConfig);
+            }
+
+            // 如果访问自定义管理路径，允许访问 SPA
+            if (isAdminPath) {
+                return next();
+            }
+
+            if (!isStaticAsset && !isSpaRoute && url.pathname !== '/') {
                 return await handleMisubRequest(context);
             }
 
